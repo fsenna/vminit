@@ -131,7 +131,7 @@ config_services()
 config_ssh()
 {
     {
-        if [ "${SSH_KEY_TEST}" != "3177" ]
+        if [ "${SSH_KEY_TEST}" != "fsenna@vm" ]
         then
             mkdir -p $HOME/.ssh
             touch $HOME/.ssh/authorized_keys
