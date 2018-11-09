@@ -1,0 +1,164 @@
+#!/bin/bash
+
+# Variaveis e parametros de configuração do programa.
+source ./config/params
+source ./config/selinux
+source ./config/ntpdate
+
+config_timedate()
+{
+    {
+        if [ "${TIME_ZONE}" != "${TIMEDATECTL_VERIFY}" ]
+        then
+            ${TIMEDATECTL} ${TIMEDATECTL_OPT_1} ${TIME_ZONE} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+        fi
+    
+    } &> /dev/null && echo -e "Hora do sistema ...........OK!\n" \
+    || echo -e "\nErro ao configurar Hora ......................!!\n"
+}
+
+# Função para limpeza e deleção das configurações iniciais do sistema.
+clean_config()
+{
+    {
+        # Executa uma limpeza nos arquivos issue e motd.
+        for CLEAN_FILES in ${CONFIG_FILES[@]}; do
+
+            if [ ! -s "${CLEAN_FILES}" ]
+            then
+                > "${CLEAN_FILES}" 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+
+        # Remove os arquivos iniciais de configuração do sistema.
+        for CLEAN_ROOT_FILES in ${ROOT_FILES[@]}; do
+
+            if [ -f "${CLEAN_ROOT_FILES}" ]
+            then
+                ${RM} ${OPT_FV} "${CLEAN_ROOT_FILES}" \
+                1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+    
+    } &> /dev/null && echo -e "Limpeza Inicial ...........OK!\n" \
+    || echo -e "\nErro ao Limpar ...............................!!\n"
+}
+
+# Repositorios padrão
+repo_essentials()
+{
+    {
+        # Verifica se a chave do EPEL ja esta instalada.
+        if [ -f ${EPEL_KEY_FILE} ]
+        then
+            ${RPM} ${RPM_OPT_2} "${EPEL_KEY}"
+        fi
+
+        # Executa a instalação dos repositorios padrão. Ex. EPEL
+        for REPOS in ${REPO_DEF[@]}; do
+
+            REPO_TEST=$(${RPM} ${RPM_OPT} |${EGREP} ${REPOS})
+
+            if [ -z ${REPO_TEST} ]
+            then
+
+                ${YUM} ${YUM_OPT_1} ${YUM_OPT_FLAG_1} ${REPOS} \
+                1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+    
+    } &> /dev/null && echo -e "Repositorios Padrao .......OK!\n" \
+    || echo -e "\nErro ao configurar os repositorios ...........!!\n"
+}
+
+# Atualização do sistema e programas padrão
+packages_default ()
+{
+    {
+        # Executa a instalação do programas padrão para o sistema. Ex. Vim
+        for PKGS_DEF in ${PACK_DEF[@]}; do
+
+            # Teste se os programas ja estão instalados.
+            PKGS_TEST=$(${RPM} ${RPM_OPT} |${EGREP} ${PKGS_DEF})
+
+            if [ -z ${PKGS_TEST} ]
+            then
+                
+                ${YUM} ${YUM_OPT_1} ${YUM_OPT_FLAG_1} ${PKGS_DEF} \
+                1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+    
+    } &> /dev/null && echo -e "Programas Padrao ..........OK!\n" \
+    || echo -e "\nErro ao instalar os programas ................!!\n"
+}
+
+config_services()
+{
+    {
+        # Desativa os serviços na lista.
+        for SERVI in ${SERV_DIS[@]}; do
+
+            SERV_CHECK=$(${SYSTEMCTL} ${SYSTEMCTL_OPT_1} |${EGREP} "^${SERVI}" |awk '{print $2}')
+
+            if [ "${SERV_CHECK}" == "enabled" ] || [ "${SERV_CHECK}" == "static" ]
+            then
+                ${SYSTEMCTL} ${SYSTEMCTL_OPT_3} ${SERVI} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+                ${SYSTEMCTL} ${SYSTEMCTL_OPT_5} ${SERVI} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+    
+    } &> /dev/null && echo -e "Desativando Serviços ......OK!\n" \
+    || echo -e "\nErro ao desativar os serviços ................!!\n"
+
+    {
+        # Ativa os serviços na lista.
+        for SERVI in ${SERV_ENB[@]}; do
+
+            SERV_CHECK=$(${SYSTEMCTL} ${SYSTEMCTL_OPT_1} |${EGREP} "^${SERVI}" |awk '{print $2}')
+
+            if [ "${SERV_CHECK}" == "disabled" ] || [ "${SERV_CHECK}" == "static" ]
+            then
+                ${SYSTEMCTL} ${SYSTEMCTL_OPT_2} ${SERVI} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+                ${SYSTEMCTL} ${SYSTEMCTL_OPT_4} ${SERVI} 1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            fi
+        done
+    
+    } &> /dev/null && echo -e "Ativando Serviços .........OK!\n" \
+    || echo -e "\nErro ao ativar os serviços ...................!!\n"
+}
+
+config_ssh()
+{
+    {
+        if [ "${SSH_KEY_TEST}" != "3177" ]
+        then
+            mkdir -p $HOME/.ssh
+            touch $HOME/.ssh/authorized_keys
+            echo "${SSH_RSA_PUB}" >> $HOME/.ssh/authorized_keys
+        fi
+
+        if [ "${ROOT_LOGIN}" != "yes" ]
+        then
+            ${CP} ${CP_OPT_1} "/etc/ssh/sshd_config" "./backup/sshd_config_backup" \
+            1>> "${LOG_OUT}" 2>> "${LOG_ERR}"
+            
+            echo "$(sed -e "s/#PermitRootLogin/PermitRootLogin/g" "/etc/ssh/sshd_config")" \
+            > "/etc/ssh/sshd_config"
+
+            ${SYSTEMCTL} ${SYSTEMCTL_OPT_6} sshd.service
+        fi
+    
+    } &> /dev/null && echo -e "Chave SSH .................OK!\n" \
+    || echo -e "\nErro ao configurar Chave SSH .................!!\n"
+}
+
+# Executando o programa.
+clean_config
+repo_essentials
+packages_default
+config_selinux
+config_services
+config_timedate
+config_ntpdate
+config_ssh

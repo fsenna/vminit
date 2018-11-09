@@ -1,0 +1,19 @@
+#!/bin/bash
+
+export PATH=export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+URL_SISINIT="https://github.com/FsennaTux/vminit.git"
+
+GIT_TEST=$(rpm -aq |egrep "^git-")
+
+if [ -z ${GIT_TEST} ]
+then
+    yum install -y git >> /tmp/git.out 2>&1
+    echo -e "\nGit .......................OK!\n"
+else
+    echo -e "\nGit .......................OK!\n"
+fi
+
+git clone "${URL_SISINIT}" >> /tmp/git.out 2>&1
+cd vminit
+bash run
